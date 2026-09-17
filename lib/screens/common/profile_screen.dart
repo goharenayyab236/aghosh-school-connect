@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../login_screen.dart';
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -11,6 +13,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool isLoading = true;
+  bool isLoggingOut = false;
 
   String name = 'Loading...';
   String email = '';
@@ -28,9 +31,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
+        if (!mounted) return;
+
         setState(() {
           isLoading = false;
         });
+
         return;
       }
 
@@ -39,6 +45,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .doc(user.uid)
           .get();
 
+      if (!mounted) return;
+
       if (document.exists) {
         final data = document.data();
 
@@ -46,31 +54,93 @@ class _ProfileScreenState extends State<ProfileScreen> {
           name = data?['name'] ?? 'No name';
           email = data?['email'] ?? user.email ?? '';
           phone = data?['phone'] ?? '';
-          role = data?['role'] ?? '';
+          role = data?['role'] ?? 'Parent';
           isLoading = false;
         });
       } else {
         setState(() {
           name = 'Profile not found';
           email = user.email ?? '';
+          role = 'Parent';
           isLoading = false;
         });
       }
     } catch (e) {
+      if (!mounted) return;
+
       setState(() {
         isLoading = false;
       });
     }
   }
 
+  // ------------------------------------------------------------
+  // LOGOUT FOR ALL ROLES
+  // ------------------------------------------------------------
+
   Future<void> logout() async {
-    await FirebaseAuth.instance.signOut();
-
-    if (!mounted) return;
-
-    Navigator.of(context).popUntil(
-          (route) => route.isFirst,
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Logout'),
+          content: const Text(
+            'Are you sure you want to logout?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
     );
+
+    if (shouldLogout != true) {
+      return;
+    }
+
+    setState(() {
+      isLoggingOut = true;
+    });
+
+    try {
+      // Sign out from Firebase Authentication
+      await FirebaseAuth.instance.signOut();
+
+      if (!mounted) return;
+
+      // Remove ALL previous screens and open Login screen
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(),
+        ),
+            (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoggingOut = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Logout failed:\n$e',
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -80,16 +150,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text('My Profile'),
         centerTitle: true,
       ),
+
       body: isLoading
           ? const Center(
         child: CircularProgressIndicator(),
       )
           : SingleChildScrollView(
         padding: const EdgeInsets.all(20),
+
         child: Column(
           children: [
             const SizedBox(height: 10),
 
+            // Profile picture
             const CircleAvatar(
               radius: 50,
               child: Icon(
@@ -100,8 +173,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 15),
 
+            // Name
             Text(
               name,
+              textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -110,12 +185,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 5),
 
+            // Role
             Text(
               role.isEmpty
                   ? 'Parent'
                   : role.toUpperCase(),
               style: const TextStyle(
                 color: Colors.grey,
+                fontWeight: FontWeight.w500,
               ),
             ),
 
@@ -151,15 +228,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 30),
 
+            // Logout button
             SizedBox(
               width: double.infinity,
               height: 50,
+
               child: OutlinedButton.icon(
-                onPressed: logout,
-                icon: const Icon(Icons.logout),
-                label: const Text(
-                  'Logout',
-                  style: TextStyle(
+                onPressed:
+                isLoggingOut ? null : logout,
+
+                icon: isLoggingOut
+                    ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child:
+                  CircularProgressIndicator(
+                    strokeWidth: 2,
+                  ),
+                )
+                    : const Icon(
+                  Icons.logout,
+                ),
+
+                label: Text(
+                  isLoggingOut
+                      ? 'Logging out...'
+                      : 'Logout',
+                  style: const TextStyle(
                     fontSize: 16,
                   ),
                 ),
@@ -178,8 +273,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+
       child: ListTile(
         leading: Icon(icon),
+
         title: Text(
           title,
           style: const TextStyle(
@@ -187,8 +284,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             color: Colors.grey,
           ),
         ),
+
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
+
           child: Text(
             value,
             style: const TextStyle(

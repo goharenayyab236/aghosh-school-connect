@@ -2,8 +2,82 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class AttendanceScreen extends StatelessWidget {
+class AttendanceScreen extends StatefulWidget {
 const AttendanceScreen({super.key});
+
+@override
+State<AttendanceScreen> createState() => _AttendanceScreenState();
+}
+
+class _AttendanceScreenState extends State<AttendanceScreen> {
+String selectedMonth = 'All Months';
+
+String _monthName(int month) {
+const months = [
+'January',
+'February',
+'March',
+'April',
+'May',
+'June',
+'July',
+'August',
+'September',
+'October',
+'November',
+'December',
+];
+
+return months[month - 1];
+}
+
+DateTime? _getDate(Map<String, dynamic> data) {
+final dateValue = data['date'];
+
+if (dateValue is Timestamp) {
+return dateValue.toDate();
+}
+
+if (dateValue is DateTime) {
+return dateValue;
+}
+
+if (dateValue is String) {
+// Try normal ISO date format first.
+final parsed = DateTime.tryParse(dateValue);
+
+if (parsed != null) {
+return parsed;
+}
+
+// Try dd/MM/yyyy
+final parts = dateValue.split('/');
+
+if (parts.length == 3) {
+final day = int.tryParse(parts[0]);
+final month = int.tryParse(parts[1]);
+final year = int.tryParse(parts[2]);
+
+if (day != null && month != null && year != null) {
+return DateTime(year, month, day);
+}
+}
+}
+
+return null;
+}
+
+String _formatDate(Map<String, dynamic> data) {
+final date = _getDate(data);
+
+if (date == null) {
+return data['date']?.toString() ?? 'Unknown date';
+}
+
+return '${date.day.toString().padLeft(2, '0')}/'
+'${date.month.toString().padLeft(2, '0')}/'
+'${date.year}';
+}
 
 @override
 Widget build(BuildContext context) {
@@ -12,13 +86,11 @@ appBar: AppBar(
 title: const Text('Attendance'),
 centerTitle: true,
 ),
-
 body: StreamBuilder<QuerySnapshot>(
 stream: FirebaseFirestore.instance
     .collection('attendance')
     .where('studentId', isEqualTo: 'student_001')
     .snapshots(),
-
 builder: (context, snapshot) {
 if (snapshot.connectionState == ConnectionState.waiting) {
 return const Center(
@@ -28,14 +100,86 @@ child: CircularProgressIndicator(),
 
 if (snapshot.hasError) {
 return Center(
+child: Padding(
+padding: const EdgeInsets.all(20),
 child: Text(
 'Error loading attendance:\n${snapshot.error}',
 textAlign: TextAlign.center,
 ),
+),
 );
 }
 
-final records = snapshot.data?.docs ?? [];
+final allRecords = snapshot.data?.docs ?? [];
+
+// Create month options from the Firebase records.
+final Set<String> monthSet = {};
+
+for (final document in allRecords) {
+final data = document.data() as Map<String, dynamic>;
+final date = _getDate(data);
+
+if (date != null) {
+monthSet.add('${date.year}-${date.month}');
+}
+}
+
+final sortedMonths = monthSet.toList()
+..sort((a, b) => b.compareTo(a));
+
+final monthOptions = <String>['All Months'];
+
+for (final monthKey in sortedMonths) {
+final parts = monthKey.split('-');
+
+if (parts.length == 2) {
+final year = int.tryParse(parts[0]);
+final month = int.tryParse(parts[1]);
+
+if (year != null && month != null) {
+monthOptions.add('${_monthName(month)} $year');
+}
+}
+}
+
+// If the selected month no longer exists, return to All Months.
+if (!monthOptions.contains(selectedMonth)) {
+selectedMonth = 'All Months';
+}
+
+// Filter records according to selected month.
+final records = allRecords.where((document) {
+if (selectedMonth == 'All Months') {
+return true;
+}
+
+final data = document.data() as Map<String, dynamic>;
+final date = _getDate(data);
+
+if (date == null) {
+return false;
+}
+
+final recordMonth =
+'${_monthName(date.month)} ${date.year}';
+
+return recordMonth == selectedMonth;
+}).toList();
+
+// Sort newest attendance first.
+records.sort((a, b) {
+final dataA = a.data() as Map<String, dynamic>;
+final dataB = b.data() as Map<String, dynamic>;
+
+final dateA = _getDate(dataA);
+final dateB = _getDate(dataB);
+
+if (dateA == null || dateB == null) {
+return 0;
+}
+
+return dateB.compareTo(dateA);
+});
 
 int present = 0;
 int absent = 0;
@@ -112,13 +256,11 @@ _attendanceItem(
 present.toString(),
 Colors.green,
 ),
-
 _attendanceItem(
 'Absent',
 absent.toString(),
 Colors.red,
 ),
-
 _attendanceItem(
 'Total',
 total.toString(),
@@ -133,6 +275,10 @@ Colors.blue,
 
 const SizedBox(height: 25),
 
+Row(
+mainAxisAlignment:
+MainAxisAlignment.spaceBetween,
+children: [
 const Text(
 'Attendance History',
 style: TextStyle(
@@ -141,7 +287,60 @@ fontWeight: FontWeight.bold,
 ),
 ),
 
+// Month filter
+Container(
+padding:
+const EdgeInsets.symmetric(horizontal: 10),
+decoration: BoxDecoration(
+border: Border.all(
+color: Colors.grey.shade400,
+),
+borderRadius: BorderRadius.circular(10),
+),
+child: DropdownButtonHideUnderline(
+child: DropdownButton<String>(
+value: selectedMonth,
+icon: const Icon(
+Icons.keyboard_arrow_down,
+),
+items: monthOptions.map((month) {
+return DropdownMenuItem<String>(
+value: month,
+child: Text(
+month,
+style: const TextStyle(
+fontSize: 13,
+),
+),
+);
+}).toList(),
+onChanged: (value) {
+if (value != null) {
+setState(() {
+selectedMonth = value;
+});
+}
+},
+),
+),
+),
+],
+),
+
 const SizedBox(height: 15),
+
+// Show selected filter information
+if (selectedMonth != 'All Months')
+Padding(
+padding: const EdgeInsets.only(bottom: 12),
+child: Text(
+'Showing attendance for $selectedMonth',
+style: TextStyle(
+color: Colors.grey.shade600,
+fontSize: 13,
+),
+),
+),
 
 if (records.isEmpty)
 const Center(
@@ -160,9 +359,6 @@ color: Colors.grey,
 final data =
 document.data() as Map<String, dynamic>;
 
-final date =
-data['date']?.toString() ?? 'Unknown date';
-
 final status =
 data['status']?.toString() ?? 'Unknown';
 
@@ -170,24 +366,33 @@ final isPresent =
 status.toLowerCase() == 'present';
 
 return Card(
-margin: const EdgeInsets.only(bottom: 12),
+margin:
+const EdgeInsets.only(bottom: 12),
 child: ListTile(
 leading: CircleAvatar(
+backgroundColor: isPresent
+? Colors.green.shade100
+    : Colors.red.shade100,
 child: Icon(
 isPresent
 ? Icons.check
     : Icons.close,
+color: isPresent
+? Colors.green
+    : Colors.red,
 ),
 ),
 
 title: Text(
-date,
+_formatDate(data),
 style: const TextStyle(
 fontWeight: FontWeight.bold,
 ),
 ),
 
-subtitle: Text('Ahmed Khan'),
+subtitle: const Text(
+'Ahmed Khan',
+),
 
 trailing: Text(
 status,
@@ -223,9 +428,7 @@ fontWeight: FontWeight.bold,
 color: color,
 ),
 ),
-
 const SizedBox(height: 5),
-
 Text(title),
 ],
 );
