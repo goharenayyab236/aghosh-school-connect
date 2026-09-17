@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "755876487599",
+    "project_id": "aghosh-school-connect",
+    "storage_bucket": "aghosh-school-connect.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:755876487599:android:6fa4ddb2caedf7527d4f5a",
+        "android_client_info": {
+          "package_name": "com.example.aghosh_school_connect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCN9WwC7FdNMcP9l8UoOIVTcS9oKGYpfdY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
