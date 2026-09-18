@@ -14,6 +14,24 @@ class _LeaveScreenState extends State<LeaveScreen> {
   DateTime? startDate;
   DateTime? endDate;
 
+  // =========================================================
+  // SELECTED CHILD
+  // =========================================================
+
+  String selectedStudentId = 'student_001';
+  String selectedStudentName = 'Ahmed Khan';
+
+  final List<Map<String, String>> students = [
+    {
+      'id': 'student_001',
+      'name': 'Ahmed Khan',
+    },
+    {
+      'id': 'student_002',
+      'name': 'Ayesha Khan',
+    },
+  ];
+
   String selectedLeaveType = 'Medical';
   String selectedFilter = 'All Requests';
 
@@ -58,7 +76,9 @@ class _LeaveScreenState extends State<LeaveScreen> {
     if (startDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select the start date first.'),
+          content: Text(
+            'Please select the start date first.',
+          ),
         ),
       );
       return;
@@ -118,8 +138,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
       await FirebaseFirestore.instance
           .collection('leave_requests')
           .add({
-        'studentId': 'student_001',
-        'studentName': 'Ahmed Khan',
+        'studentId': selectedStudentId,
+        'studentName': selectedStudentName,
         'leaveType': selectedLeaveType,
         'reason': reasonController.text.trim(),
         'startDate': firestoreDate(startDate!),
@@ -184,7 +204,7 @@ class _LeaveScreenState extends State<LeaveScreen> {
         data['status']?.toString() ?? 'Pending';
 
     final studentName =
-        data['studentName']?.toString() ?? 'Ahmed Khan';
+        data['studentName']?.toString() ?? 'Unknown Student';
 
     Color statusColor;
 
@@ -218,7 +238,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
                     height: 5,
                     decoration: BoxDecoration(
                       color: Colors.grey.shade400,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius:
+                      BorderRadius.circular(10),
                     ),
                   ),
                 ),
@@ -278,13 +299,16 @@ class _LeaveScreenState extends State<LeaveScreen> {
                     ),
                     const Spacer(),
                     Container(
-                      padding: const EdgeInsets.symmetric(
+                      padding:
+                      const EdgeInsets.symmetric(
                         horizontal: 14,
                         vertical: 7,
                       ),
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(20),
+                        color:
+                        statusColor.withOpacity(0.12),
+                        borderRadius:
+                        BorderRadius.circular(20),
                       ),
                       child: Text(
                         status,
@@ -312,9 +336,11 @@ class _LeaveScreenState extends State<LeaveScreen> {
       String value,
       ) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding:
+      const EdgeInsets.only(bottom: 16),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+        CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 22),
           const SizedBox(width: 12),
@@ -373,7 +399,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
         padding: const EdgeInsets.all(20),
 
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment:
+          CrossAxisAlignment.stretch,
           children: [
             const Text(
               'Submit Leave Request',
@@ -384,6 +411,59 @@ class _LeaveScreenState extends State<LeaveScreen> {
             ),
 
             const SizedBox(height: 25),
+
+            // =================================================
+            // CHILD SELECTOR
+            // =================================================
+
+            const Text(
+              'Select Student',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            DropdownButtonFormField<String>(
+              value: selectedStudentId,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
+              ),
+              items: students.map((student) {
+                return DropdownMenuItem<String>(
+                  value: student['id'],
+                  child: Text(
+                    student['name']!,
+                  ),
+                );
+              }).toList(),
+              onChanged: isSubmitting
+                  ? null
+                  : (value) {
+                if (value == null) {
+                  return;
+                }
+
+                final selected =
+                students.firstWhere(
+                      (student) =>
+                  student['id'] == value,
+                );
+
+                setState(() {
+                  selectedStudentId = value;
+                  selectedStudentName =
+                  selected['name']!;
+
+                  selectedFilter =
+                  'All Requests';
+                });
+              },
+            ),
+
+            const SizedBox(height: 20),
 
             const Text(
               'Leave Type',
@@ -398,7 +478,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
               value: selectedLeaveType,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.category),
+                prefixIcon:
+                Icon(Icons.category),
               ),
               items: leaveTypes.map((type) {
                 return DropdownMenuItem(
@@ -411,7 +492,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
                   : (value) {
                 if (value != null) {
                   setState(() {
-                    selectedLeaveType = value;
+                    selectedLeaveType =
+                        value;
                   });
                 }
               },
@@ -429,8 +511,9 @@ class _LeaveScreenState extends State<LeaveScreen> {
             const SizedBox(height: 8),
 
             OutlinedButton.icon(
-              onPressed:
-              isSubmitting ? null : selectStartDate,
+              onPressed: isSubmitting
+                  ? null
+                  : selectStartDate,
               icon: const Icon(
                 Icons.calendar_today,
               ),
@@ -451,8 +534,9 @@ class _LeaveScreenState extends State<LeaveScreen> {
             const SizedBox(height: 8),
 
             OutlinedButton.icon(
-              onPressed:
-              isSubmitting ? null : selectEndDate,
+              onPressed: isSubmitting
+                  ? null
+                  : selectEndDate,
               icon: const Icon(
                 Icons.event,
               ),
@@ -477,7 +561,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
               maxLines: 5,
               enabled: !isSubmitting,
               decoration: const InputDecoration(
-                hintText: 'Enter reason for leave',
+                hintText:
+                'Enter reason for leave',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -487,13 +572,15 @@ class _LeaveScreenState extends State<LeaveScreen> {
             SizedBox(
               height: 52,
               child: ElevatedButton.icon(
-                onPressed:
-                isSubmitting ? null : submitRequest,
+                onPressed: isSubmitting
+                    ? null
+                    : submitRequest,
                 icon: isSubmitting
                     ? const SizedBox(
                   height: 20,
                   width: 20,
-                  child: CircularProgressIndicator(
+                  child:
+                  CircularProgressIndicator(
                     strokeWidth: 2,
                   ),
                 )
@@ -522,14 +609,16 @@ class _LeaveScreenState extends State<LeaveScreen> {
             const SizedBox(height: 15),
 
             SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+              scrollDirection:
+              Axis.horizontal,
               child: Row(
                 children: filters.map((filter) {
                   final isSelected =
                       selectedFilter == filter;
 
                   return Padding(
-                    padding: const EdgeInsets.only(
+                    padding:
+                    const EdgeInsets.only(
                       right: 8,
                     ),
                     child: ChoiceChip(
@@ -537,7 +626,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
                       selected: isSelected,
                       onSelected: (_) {
                         setState(() {
-                          selectedFilter = filter;
+                          selectedFilter =
+                              filter;
                         });
                       },
                     ),
@@ -548,12 +638,16 @@ class _LeaveScreenState extends State<LeaveScreen> {
 
             const SizedBox(height: 18),
 
+            // =================================================
+            // LEAVE REQUESTS
+            // =================================================
+
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('leave_requests')
                   .where(
                 'studentId',
-                isEqualTo: 'student_001',
+                isEqualTo: selectedStudentId,
               )
                   .snapshots(),
 
@@ -562,8 +656,10 @@ class _LeaveScreenState extends State<LeaveScreen> {
                     ConnectionState.waiting) {
                   return const Center(
                     child: Padding(
-                      padding: EdgeInsets.all(25),
-                      child: CircularProgressIndicator(),
+                      padding:
+                      EdgeInsets.all(25),
+                      child:
+                      CircularProgressIndicator(),
                     ),
                   );
                 }
@@ -571,7 +667,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
                 if (snapshot.hasError) {
                   return Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding:
+                      const EdgeInsets.all(20),
                       child: Text(
                         'Error loading requests:\n'
                             '${snapshot.error}',
@@ -583,31 +680,39 @@ class _LeaveScreenState extends State<LeaveScreen> {
                 final allRequests =
                     snapshot.data?.docs ?? [];
 
-                final requests = allRequests.where((doc) {
-                  final data =
-                  doc.data() as Map<String, dynamic>;
+                final requests =
+                allRequests.where((doc) {
+                  final data = doc.data()
+                  as Map<String, dynamic>;
 
                   final status =
-                      data['status']?.toString() ?? 'Pending';
+                      data['status']
+                          ?.toString() ??
+                          'Pending';
 
-                  if (selectedFilter == 'All Requests') {
+                  if (selectedFilter ==
+                      'All Requests') {
                     return true;
                   }
 
                   return status.toLowerCase() ==
-                      selectedFilter.toLowerCase();
+                      selectedFilter
+                          .toLowerCase();
                 }).toList();
 
                 if (requests.isEmpty) {
                   return Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding:
+                      const EdgeInsets.all(20),
                       child: Center(
                         child: Text(
-                          selectedFilter == 'All Requests'
+                          selectedFilter ==
+                              'All Requests'
                               ? 'No previous leave requests.'
                               : 'No $selectedFilter leave requests.',
-                          style: const TextStyle(
+                          style:
+                          const TextStyle(
                             color: Colors.grey,
                           ),
                         ),
@@ -617,43 +722,53 @@ class _LeaveScreenState extends State<LeaveScreen> {
                 }
 
                 return Column(
-                  children: requests.map((document) {
-                    final data =
-                    document.data()
+                  children:
+                  requests.map((document) {
+                    final data = document.data()
                     as Map<String, dynamic>;
 
                     final reason =
-                        data['reason']?.toString() ??
+                        data['reason']
+                            ?.toString() ??
                             'No reason';
 
                     final startDate =
-                        data['startDate']?.toString() ??
+                        data['startDate']
+                            ?.toString() ??
                             'Unknown date';
 
                     final endDate =
-                        data['endDate']?.toString() ??
+                        data['endDate']
+                            ?.toString() ??
                             startDate;
 
                     final leaveType =
-                        data['leaveType']?.toString() ??
+                        data['leaveType']
+                            ?.toString() ??
                             'Not specified';
 
                     final status =
-                        data['status']?.toString() ??
+                        data['status']
+                            ?.toString() ??
                             'Pending';
 
                     final statusColor =
-                    getStatusColor(status);
+                    getStatusColor(
+                      status,
+                    );
 
                     return Card(
-                      margin: const EdgeInsets.only(
+                      margin:
+                      const EdgeInsets.only(
                         bottom: 12,
                       ),
                       elevation: 2,
 
                       child: InkWell(
                         borderRadius:
-                        BorderRadius.circular(12),
+                        BorderRadius.circular(
+                          12,
+                        ),
                         onTap: () {
                           showRequestDetails(
                             context,
@@ -663,56 +778,73 @@ class _LeaveScreenState extends State<LeaveScreen> {
 
                         child: Padding(
                           padding:
-                          const EdgeInsets.all(16),
+                          const EdgeInsets.all(
+                            16,
+                          ),
 
                           child: Row(
                             children: [
-                              CircleAvatar(
-                                child: const Icon(
+                              const CircleAvatar(
+                                child: Icon(
                                   Icons.event_note,
                                 ),
                               ),
 
-                              const SizedBox(width: 12),
+                              const SizedBox(
+                                width: 12,
+                              ),
 
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                                  CrossAxisAlignment
+                                      .start,
                                   children: [
                                     Text(
                                       leaveType,
-                                      style: const TextStyle(
+                                      style:
+                                      const TextStyle(
                                         fontSize: 17,
                                         fontWeight:
-                                        FontWeight.bold,
+                                        FontWeight
+                                            .bold,
                                       ),
                                     ),
 
-                                    const SizedBox(height: 6),
+                                    const SizedBox(
+                                      height: 6,
+                                    ),
 
                                     Text(
-                                      startDate == endDate
+                                      startDate ==
+                                          endDate
                                           ? startDate
                                           : '$startDate to $endDate',
                                     ),
 
-                                    const SizedBox(height: 6),
+                                    const SizedBox(
+                                      height: 6,
+                                    ),
 
                                     Text(
                                       reason,
                                       maxLines: 1,
                                       overflow:
-                                      TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.grey,
+                                      TextOverflow
+                                          .ellipsis,
+                                      style:
+                                      const TextStyle(
+                                        color:
+                                        Colors.grey,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
 
-                              const SizedBox(width: 10),
+                              const SizedBox(
+                                width: 10,
+                              ),
 
                               Column(
                                 children: [
@@ -725,25 +857,35 @@ class _LeaveScreenState extends State<LeaveScreen> {
                                     ),
                                     decoration:
                                     BoxDecoration(
-                                      color: statusColor
-                                          .withOpacity(0.12),
+                                      color:
+                                      statusColor
+                                          .withOpacity(
+                                        0.12,
+                                      ),
                                       borderRadius:
-                                      BorderRadius.circular(
+                                      BorderRadius
+                                          .circular(
                                         20,
                                       ),
                                     ),
                                     child: Text(
                                       status,
-                                      style: TextStyle(
-                                        color: statusColor,
-                                        fontSize: 12,
+                                      style:
+                                      TextStyle(
+                                        color:
+                                        statusColor,
+                                        fontSize:
+                                        12,
                                         fontWeight:
-                                        FontWeight.bold,
+                                        FontWeight
+                                            .bold,
                                       ),
                                     ),
                                   ),
 
-                                  const SizedBox(height: 10),
+                                  const SizedBox(
+                                    height: 10,
+                                  ),
 
                                   const Icon(
                                     Icons

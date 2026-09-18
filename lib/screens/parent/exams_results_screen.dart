@@ -11,10 +11,31 @@ class ExamsResultsScreen extends StatefulWidget {
 
 class _ExamsResultsScreenState
     extends State<ExamsResultsScreen> {
+  // =========================================================
+  // SELECTED CHILD
+  // =========================================================
+
+  String selectedStudentId = 'student_001';
+  String selectedStudentName = 'Ahmed Khan';
+
+  final List<Map<String, String>> students = [
+    {
+      'id': 'student_001',
+      'name': 'Ahmed Khan',
+    },
+    {
+      'id': 'student_002',
+      'name': 'Ayesha Khan',
+    },
+  ];
+
   String examFilter = 'All Exams';
   String resultFilter = 'All Results';
 
-  // Convert Firestore date/string into DateTime.
+  // =========================================================
+  // DATE HELPERS
+  // =========================================================
+
   DateTime? _getDate(dynamic value) {
     if (value is Timestamp) {
       return value.toDate();
@@ -32,16 +53,32 @@ class _ExamsResultsScreenState
       }
 
       // Supports dd/MM/yyyy
-      final parts = value.split('/');
+      final slashParts = value.split('/');
 
-      if (parts.length == 3) {
-        final day = int.tryParse(parts[0]);
-        final month = int.tryParse(parts[1]);
-        final year = int.tryParse(parts[2]);
+      if (slashParts.length == 3) {
+        final day = int.tryParse(slashParts[0]);
+        final month = int.tryParse(slashParts[1]);
+        final year = int.tryParse(slashParts[2]);
 
         if (day != null &&
             month != null &&
             year != null) {
+          return DateTime(year, month, day);
+        }
+      }
+
+      // Supports dd-MM-yyyy
+      final dashParts = value.split('-');
+
+      if (dashParts.length == 3) {
+        final day = int.tryParse(dashParts[0]);
+        final month = int.tryParse(dashParts[1]);
+        final year = int.tryParse(dashParts[2]);
+
+        if (day != null &&
+            month != null &&
+            year != null &&
+            day > 12) {
           return DateTime(year, month, day);
         }
       }
@@ -100,9 +137,62 @@ class _ExamsResultsScreenState
     return examDay.isAfter(today);
   }
 
-  // =========================
+  // =========================================================
+  // NUMBER HELPERS
+  // =========================================================
+
+  double _toNumber(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(
+      value?.toString() ?? '',
+    ) ??
+        0;
+  }
+
+  double _calculatePercentage(
+      dynamic obtained,
+      dynamic total,
+      ) {
+    final obtainedMarks = _toNumber(obtained);
+    final totalMarks = _toNumber(total);
+
+    if (totalMarks <= 0) {
+      return 0;
+    }
+
+    return (obtainedMarks / totalMarks) * 100;
+  }
+
+  String _getGrade(double percentage) {
+    if (percentage >= 80) {
+      return 'A+';
+    }
+
+    if (percentage >= 70) {
+      return 'A';
+    }
+
+    if (percentage >= 60) {
+      return 'B';
+    }
+
+    if (percentage >= 50) {
+      return 'C';
+    }
+
+    if (percentage >= 40) {
+      return 'D';
+    }
+
+    return 'F';
+  }
+
+  // =========================================================
   // EXAM DETAILS
-  // =========================
+  // =========================================================
 
   void _showExamDetails(
       BuildContext context,
@@ -122,10 +212,21 @@ class _ExamsResultsScreenState
         data['totalMarks']?.toString() ??
             'Not available';
 
+    final obtainedMarks =
+        data['obtainedMarks']?.toString() ??
+            'Not available';
+
     final syllabus =
         data['syllabus']?.toString() ??
             data['description']?.toString() ??
             'No additional information available.';
+
+    final percentage = _calculatePercentage(
+      data['obtainedMarks'],
+      data['totalMarks'],
+    );
+
+    final grade = _getGrade(percentage);
 
     showModalBottomSheet(
       context: context,
@@ -136,92 +237,106 @@ class _ExamsResultsScreenState
         ),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(24),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment:
-              CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 45,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius:
-                      BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 25),
-
-                Row(
-                  children: [
-                    const CircleAvatar(
-                      radius: 28,
-                      child: Icon(
-                        Icons.event,
-                        size: 28,
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment:
+                CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 45,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius:
+                        BorderRadius.circular(10),
                       ),
                     ),
+                  ),
 
-                    const SizedBox(width: 15),
+                  const SizedBox(height: 25),
 
-                    Expanded(
-                      child: Text(
-                        examName,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight:
-                          FontWeight.bold,
+                  Row(
+                    children: [
+                      const CircleAvatar(
+                        radius: 28,
+                        child: Icon(
+                          Icons.assessment,
+                          size: 28,
                         ),
                       ),
-                    ),
-                  ],
-                ),
 
-                const SizedBox(height: 25),
+                      const SizedBox(width: 15),
 
-                _detailRow(
-                  Icons.book,
-                  'Subject',
-                  subject,
-                ),
-
-                _detailRow(
-                  Icons.calendar_today,
-                  'Exam Date',
-                  _formatDate(examDate),
-                ),
-
-                _detailRow(
-                  Icons.grade,
-                  'Total Marks',
-                  totalMarks,
-                ),
-
-                _detailRow(
-                  Icons.description,
-                  'Syllabus / Information',
-                  syllabus,
-                ),
-
-                const SizedBox(height: 15),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: const Text('Close'),
+                      Expanded(
+                        child: Text(
+                          examName,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight:
+                            FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
 
-                const SizedBox(height: 10),
-              ],
+                  const SizedBox(height: 25),
+
+                  _detailRow(
+                    Icons.book,
+                    'Subject',
+                    subject,
+                  ),
+
+                  _detailRow(
+                    Icons.calendar_today,
+                    'Exam Date',
+                    _formatDate(examDate),
+                  ),
+
+                  _detailRow(
+                    Icons.score,
+                    'Marks Obtained',
+                    '$obtainedMarks / $totalMarks',
+                  ),
+
+                  _detailRow(
+                    Icons.percent,
+                    'Percentage',
+                    '${percentage.toStringAsFixed(1)}%',
+                  ),
+
+                  _detailRow(
+                    Icons.grade,
+                    'Grade',
+                    grade,
+                  ),
+
+                  _detailRow(
+                    Icons.description,
+                    'Syllabus / Information',
+                    syllabus,
+                  ),
+
+                  const SizedBox(height: 15),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Close'),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+                ],
+              ),
             ),
           ),
         );
@@ -229,9 +344,9 @@ class _ExamsResultsScreenState
     );
   }
 
-  // =========================
+  // =========================================================
   // RESULT DETAILS
-  // =========================
+  // =========================================================
 
   void _showResultDetails(
       BuildContext context,
@@ -253,13 +368,18 @@ class _ExamsResultsScreenState
         data['obtainedMarks']?.toString() ??
             '0';
 
+    final percentage = _calculatePercentage(
+      data['obtainedMarks'],
+      data['totalMarks'],
+    );
+
     final grade =
         data['grade']?.toString() ??
-            'N/A';
+            _getGrade(percentage);
 
     final remarks =
         data['remarks']?.toString() ??
-            'No remarks available.';
+            '';
 
     showModalBottomSheet(
       context: context,
@@ -270,92 +390,101 @@ class _ExamsResultsScreenState
         ),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(24),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment:
-              CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 45,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius:
-                      BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 25),
-
-                Row(
-                  children: [
-                    const CircleAvatar(
-                      radius: 28,
-                      child: Icon(
-                        Icons.assessment,
-                        size: 28,
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment:
+                CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 45,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius:
+                        BorderRadius.circular(10),
                       ),
                     ),
+                  ),
 
-                    const SizedBox(width: 15),
+                  const SizedBox(height: 25),
 
-                    Expanded(
-                      child: Text(
-                        examName,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight:
-                          FontWeight.bold,
+                  Row(
+                    children: [
+                      const CircleAvatar(
+                        radius: 28,
+                        child: Icon(
+                          Icons.assessment,
+                          size: 28,
                         ),
                       ),
-                    ),
-                  ],
-                ),
 
-                const SizedBox(height: 25),
+                      const SizedBox(width: 15),
 
-                _detailRow(
-                  Icons.book,
-                  'Subject',
-                  subject,
-                ),
-
-                _detailRow(
-                  Icons.bar_chart,
-                  'Marks Obtained',
-                  '$obtainedMarks / $totalMarks',
-                ),
-
-                _detailRow(
-                  Icons.grade,
-                  'Grade',
-                  grade,
-                ),
-
-                _detailRow(
-                  Icons.comment,
-                  'Remarks',
-                  remarks,
-                ),
-
-                const SizedBox(height: 15),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: const Text('Close'),
+                      Expanded(
+                        child: Text(
+                          examName,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight:
+                            FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
 
-                const SizedBox(height: 10),
-              ],
+                  const SizedBox(height: 25),
+
+                  _detailRow(
+                    Icons.book,
+                    'Subject',
+                    subject,
+                  ),
+
+                  _detailRow(
+                    Icons.bar_chart,
+                    'Marks Obtained',
+                    '$obtainedMarks / $totalMarks',
+                  ),
+
+                  _detailRow(
+                    Icons.percent,
+                    'Percentage',
+                    '${percentage.toStringAsFixed(1)}%',
+                  ),
+
+                  _detailRow(
+                    Icons.grade,
+                    'Grade',
+                    grade,
+                  ),
+
+                  if (remarks.isNotEmpty)
+                    _detailRow(
+                      Icons.comment,
+                      'Remarks',
+                      remarks,
+                    ),
+
+                  const SizedBox(height: 15),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Close'),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+                ],
+              ),
             ),
           ),
         );
@@ -363,13 +492,18 @@ class _ExamsResultsScreenState
     );
   }
 
+  // =========================================================
+  // DETAIL ROW
+  // =========================================================
+
   Widget _detailRow(
       IconData icon,
       String title,
       String value,
       ) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
+      padding:
+      const EdgeInsets.only(bottom: 18),
       child: Row(
         crossAxisAlignment:
         CrossAxisAlignment.start,
@@ -412,177 +546,352 @@ class _ExamsResultsScreenState
     );
   }
 
+  // =========================================================
+  // BUILD
+  // =========================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Exams & Results'),
+        title: const Text(
+          'Exams & Results',
+        ),
         centerTitle: true,
       ),
 
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Text(
-            'Examination Information',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('exams')
+            .where(
+          'studentId',
+          isEqualTo: selectedStudentId,
+        )
+            .snapshots(),
 
-          const SizedBox(height: 20),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
 
-          // =========================
-          // EXAMS
-          // =========================
-
-          const Text(
-            'Exams',
-            style: TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Exam filter
-          Container(
-            padding:
-            const EdgeInsets.symmetric(
-              horizontal: 15,
-            ),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: Colors.grey.shade400,
-              ),
-              borderRadius:
-              BorderRadius.circular(12),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: examFilter,
-                isExpanded: true,
-                icon: const Icon(
-                  Icons.keyboard_arrow_down,
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'All Exams',
-                    child: Text('All Exams'),
-                  ),
-                  DropdownMenuItem(
-                    value: "Today's Exams",
-                    child: Text("Today's Exams"),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Upcoming Exams',
-                    child: Text('Upcoming Exams'),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      examFilter = value;
-                    });
-                  }
-                },
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 18),
-
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('exams')
-                .where(
-              'studentId',
-              isEqualTo: 'student_001',
-            )
-                .snapshots(),
-
-            builder: (context, snapshot) {
-              if (snapshot.connectionState ==
-                  ConnectionState.waiting) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child:
-                    CircularProgressIndicator(),
-                  ),
-                );
-              }
-
-              if (snapshot.hasError) {
-                return Text(
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding:
+                const EdgeInsets.all(20),
+                child: Text(
                   'Error loading exams:\n${snapshot.error}',
-                );
-              }
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
 
-              final allExams =
-                  snapshot.data?.docs ?? [];
+          final documents =
+              snapshot.data?.docs ?? [];
 
-              final exams = allExams.where(
+          final allExams = [...documents];
+
+          // Sort by exam date.
+          allExams.sort((a, b) {
+            final aData =
+            a.data()
+            as Map<String, dynamic>;
+
+            final bData =
+            b.data()
+            as Map<String, dynamic>;
+
+            final aDate =
+            _getDate(aData['examDate']);
+
+            final bDate =
+            _getDate(bData['examDate']);
+
+            if (aDate == null &&
+                bDate == null) {
+              return 0;
+            }
+
+            if (aDate == null) {
+              return 1;
+            }
+
+            if (bDate == null) {
+              return -1;
+            }
+
+            return bDate.compareTo(aDate);
+          });
+
+          // =================================================
+          // FILTER EXAMS
+          // =================================================
+
+          final filteredExams =
+          allExams.where((document) {
+            final data =
+            document.data()
+            as Map<String, dynamic>;
+
+            final examDate =
+            data['examDate'];
+
+            if (examFilter ==
+                "Today's Exams") {
+              return _isToday(examDate);
+            }
+
+            if (examFilter ==
+                'Upcoming Exams') {
+              return _isUpcoming(examDate);
+            }
+
+            return true;
+          }).toList();
+
+          // =================================================
+          // FILTER RESULTS
+          // =================================================
+
+          var results = [...allExams];
+
+          if (resultFilter ==
+              'Latest Results') {
+            results =
+                results.take(1).toList();
+          }
+
+          return ListView(
+            padding:
+            const EdgeInsets.all(20),
+            children: [
+              const Text(
+                'Examination Information',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight:
+                  FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 15),
+
+              // =================================================
+              // CHILD SELECTOR
+              // =================================================
+
+              Container(
+                padding:
+                const EdgeInsets.symmetric(
+                  horizontal: 15,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color:
+                    Colors.grey.shade400,
+                  ),
+                  borderRadius:
+                  BorderRadius.circular(12),
+                ),
+                child:
+                DropdownButtonHideUnderline(
+                  child:
+                  DropdownButton<String>(
+                    value:
+                    selectedStudentId,
+                    isExpanded: true,
+                    icon: const Icon(
+                      Icons
+                          .keyboard_arrow_down,
+                    ),
+                    items:
+                    students.map((student) {
+                      return DropdownMenuItem<
+                          String>(
+                        value:
+                        student['id'],
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.person,
+                              size: 20,
+                            ),
+                            const SizedBox(
+                              width: 10,
+                            ),
+                            Text(
+                              student['name']!,
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+
+                      final selected =
+                      students.firstWhere(
+                            (student) =>
+                        student['id'] ==
+                            value,
+                      );
+
+                      setState(() {
+                        selectedStudentId =
+                            value;
+
+                        selectedStudentName =
+                        selected['name']!;
+
+                        // Reset filters when
+                        // changing child.
+                        examFilter =
+                        'All Exams';
+
+                        resultFilter =
+                        'All Results';
+                      });
+                    },
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              Text(
+                'Showing exams and results for $selectedStudentName',
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 14,
+                ),
+              ),
+
+              const SizedBox(height: 25),
+
+              // ===========================================
+              // EXAMS
+              // ===========================================
+
+              const Text(
+                'Exams',
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight:
+                  FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              Container(
+                padding:
+                const EdgeInsets.symmetric(
+                  horizontal: 15,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color:
+                    Colors.grey.shade400,
+                  ),
+                  borderRadius:
+                  BorderRadius.circular(12),
+                ),
+                child:
+                DropdownButtonHideUnderline(
+                  child:
+                  DropdownButton<String>(
+                    value: examFilter,
+                    isExpanded: true,
+                    icon: const Icon(
+                      Icons
+                          .keyboard_arrow_down,
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'All Exams',
+                        child:
+                        Text('All Exams'),
+                      ),
+                      DropdownMenuItem(
+                        value:
+                        "Today's Exams",
+                        child: Text(
+                          "Today's Exams",
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value:
+                        'Upcoming Exams',
+                        child: Text(
+                          'Upcoming Exams',
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          examFilter =
+                              value;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 18),
+
+              if (filteredExams.isEmpty)
+                Card(
+                  child: Padding(
+                    padding:
+                    const EdgeInsets.all(20),
+                    child: Text(
+                      examFilter ==
+                          'All Exams'
+                          ? 'No exams available.'
+                          : 'No exams found for this filter.',
+                      style:
+                      const TextStyle(
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                ),
+
+              ...filteredExams.map(
                     (document) {
                   final data =
                   document.data()
                   as Map<String, dynamic>;
 
-                  final examDate =
-                  data['examDate'];
-
-                  if (examFilter ==
-                      "Today's Exams") {
-                    return _isToday(examDate);
-                  }
-
-                  if (examFilter ==
-                      'Upcoming Exams') {
-                    return _isUpcoming(examDate);
-                  }
-
-                  return true;
-                },
-              ).toList();
-
-              if (exams.isEmpty) {
-                return Card(
-                  child: Padding(
-                    padding:
-                    const EdgeInsets.all(20),
-                    child: Text(
-                      examFilter == 'All Exams'
-                          ? 'No exams available.'
-                          : 'No exams found for this filter.',
-                      style: const TextStyle(
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              return Column(
-                children: exams.map((document) {
-                  final data =
-                  document.data()
-                  as Map<String, dynamic>;
-
                   final examName =
-                      data['examName']?.toString() ??
+                      data['examName']
+                          ?.toString() ??
                           'Examination';
 
                   final subject =
-                      data['subject']?.toString() ??
+                      data['subject']
+                          ?.toString() ??
                           'Subject';
 
                   final examDate =
                   data['examDate'];
 
                   final totalMarks =
-                      data['totalMarks']?.toString() ??
+                      data['totalMarks']
+                          ?.toString() ??
+                          'Not available';
+
+                  final obtainedMarks =
+                      data['obtainedMarks']
+                          ?.toString() ??
                           'Not available';
 
                   return Card(
@@ -593,7 +902,9 @@ class _ExamsResultsScreenState
                     elevation: 2,
                     child: InkWell(
                       borderRadius:
-                      BorderRadius.circular(12),
+                      BorderRadius.circular(
+                        12,
+                      ),
                       onTap: () {
                         _showExamDetails(
                           context,
@@ -601,11 +912,16 @@ class _ExamsResultsScreenState
                         );
                       },
                       child: ListTile(
+                        contentPadding:
+                        const EdgeInsets.all(
+                          14,
+                        ),
                         leading:
                         const CircleAvatar(
-                          child: Icon(Icons.event),
+                          child: Icon(
+                            Icons.event,
+                          ),
                         ),
-
                         title: Text(
                           examName,
                           style:
@@ -614,127 +930,96 @@ class _ExamsResultsScreenState
                             FontWeight.bold,
                           ),
                         ),
-
                         subtitle: Text(
                           '$subject\n'
                               'Date: ${_formatDate(examDate)}\n'
-                              'Total Marks: $totalMarks',
+                              'Marks: $obtainedMarks / $totalMarks',
                         ),
-
                         isThreeLine: true,
-
-                        trailing: const Icon(
-                          Icons.arrow_forward_ios,
+                        trailing:
+                        const Icon(
+                          Icons
+                              .arrow_forward_ios,
                           size: 16,
                           color: Colors.grey,
                         ),
                       ),
                     ),
                   );
-                }).toList(),
-              );
-            },
-          ),
-
-          const SizedBox(height: 30),
-
-          // =========================
-          // RESULTS
-          // =========================
-
-          const Text(
-            'Results',
-            style: TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Result filter
-          Container(
-            padding:
-            const EdgeInsets.symmetric(
-              horizontal: 15,
-            ),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: Colors.grey.shade400,
-              ),
-              borderRadius:
-              BorderRadius.circular(12),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: resultFilter,
-                isExpanded: true,
-                icon: const Icon(
-                  Icons.keyboard_arrow_down,
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'All Results',
-                    child: Text('All Results'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Latest Results',
-                    child: Text('Latest Results'),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      resultFilter = value;
-                    });
-                  }
                 },
               ),
-            ),
-          ),
 
-          const SizedBox(height: 18),
+              const SizedBox(height: 30),
 
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('results')
-                .where(
-              'studentId',
-              isEqualTo: 'student_001',
-            )
-                .snapshots(),
+              // ===========================================
+              // RESULTS
+              // ===========================================
 
-            builder: (context, snapshot) {
-              if (snapshot.connectionState ==
-                  ConnectionState.waiting) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child:
-                    CircularProgressIndicator(),
+              const Text(
+                'Results',
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight:
+                  FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              Container(
+                padding:
+                const EdgeInsets.symmetric(
+                  horizontal: 15,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color:
+                    Colors.grey.shade400,
                   ),
-                );
-              }
+                  borderRadius:
+                  BorderRadius.circular(12),
+                ),
+                child:
+                DropdownButtonHideUnderline(
+                  child:
+                  DropdownButton<String>(
+                    value: resultFilter,
+                    isExpanded: true,
+                    icon: const Icon(
+                      Icons
+                          .keyboard_arrow_down,
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'All Results',
+                        child: Text(
+                          'All Results',
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value:
+                        'Latest Results',
+                        child: Text(
+                          'Latest Results',
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          resultFilter =
+                              value;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
 
-              if (snapshot.hasError) {
-                return Text(
-                  'Error loading results:\n${snapshot.error}',
-                );
-              }
+              const SizedBox(height: 18),
 
-              var results =
-                  snapshot.data?.docs ?? [];
-
-              // Latest Results:
-              // show only the most recent result.
-              if (resultFilter ==
-                  'Latest Results' &&
-                  results.length > 1) {
-                results = results.take(1).toList();
-              }
-
-              if (results.isEmpty) {
-                return const Card(
+              if (results.isEmpty)
+                const Card(
                   child: Padding(
                     padding:
                     EdgeInsets.all(20),
@@ -745,12 +1030,10 @@ class _ExamsResultsScreenState
                       ),
                     ),
                   ),
-                );
-              }
+                ),
 
-              return Column(
-                children:
-                results.map((document) {
+              ...results.map(
+                    (document) {
                   final data =
                   document.data()
                   as Map<String, dynamic>;
@@ -775,12 +1058,22 @@ class _ExamsResultsScreenState
                           ?.toString() ??
                           '0';
 
+                  final percentage =
+                  _calculatePercentage(
+                    data['obtainedMarks'],
+                    data['totalMarks'],
+                  );
+
                   final grade =
-                      data['grade']?.toString() ??
-                          'N/A';
+                      data['grade']
+                          ?.toString() ??
+                          _getGrade(
+                            percentage,
+                          );
 
                   final remarks =
-                      data['remarks']?.toString() ??
+                      data['remarks']
+                          ?.toString() ??
                           '';
 
                   return Card(
@@ -791,7 +1084,9 @@ class _ExamsResultsScreenState
                     elevation: 2,
                     child: InkWell(
                       borderRadius:
-                      BorderRadius.circular(12),
+                      BorderRadius.circular(
+                        12,
+                      ),
                       onTap: () {
                         _showResultDetails(
                           context,
@@ -800,7 +1095,9 @@ class _ExamsResultsScreenState
                       },
                       child: Padding(
                         padding:
-                        const EdgeInsets.all(18),
+                        const EdgeInsets.all(
+                          18,
+                        ),
                         child: Column(
                           crossAxisAlignment:
                           CrossAxisAlignment
@@ -810,7 +1107,8 @@ class _ExamsResultsScreenState
                               children: [
                                 const CircleAvatar(
                                   child: Icon(
-                                    Icons.assessment,
+                                    Icons
+                                        .assessment,
                                   ),
                                 ),
 
@@ -823,7 +1121,8 @@ class _ExamsResultsScreenState
                                     examName,
                                     style:
                                     const TextStyle(
-                                      fontSize: 17,
+                                      fontSize:
+                                      17,
                                       fontWeight:
                                       FontWeight
                                           .bold,
@@ -841,13 +1140,17 @@ class _ExamsResultsScreenState
                               ],
                             ),
 
-                            const SizedBox(height: 15),
+                            const SizedBox(
+                              height: 15,
+                            ),
 
                             Text(
                               'Subject: $subject',
                             ),
 
-                            const SizedBox(height: 8),
+                            const SizedBox(
+                              height: 8,
+                            ),
 
                             Text(
                               'Marks: '
@@ -856,11 +1159,30 @@ class _ExamsResultsScreenState
                               const TextStyle(
                                 fontSize: 16,
                                 fontWeight:
-                                FontWeight.bold,
+                                FontWeight
+                                    .bold,
                               ),
                             ),
 
-                            const SizedBox(height: 8),
+                            const SizedBox(
+                              height: 8,
+                            ),
+
+                            Text(
+                              'Percentage: '
+                                  '${percentage.toStringAsFixed(1)}%',
+                              style:
+                              const TextStyle(
+                                fontSize: 15,
+                                fontWeight:
+                                FontWeight
+                                    .w600,
+                              ),
+                            ),
+
+                            const SizedBox(
+                              height: 8,
+                            ),
 
                             Text(
                               'Grade: $grade',
@@ -868,17 +1190,22 @@ class _ExamsResultsScreenState
                               const TextStyle(
                                 fontSize: 16,
                                 fontWeight:
-                                FontWeight.bold,
+                                FontWeight
+                                    .bold,
                               ),
                             ),
 
-                            if (remarks.isNotEmpty) ...[
-                              const SizedBox(height: 8),
+                            if (remarks
+                                .isNotEmpty) ...[
+                              const SizedBox(
+                                height: 8,
+                              ),
                               Text(
                                 'Remarks: $remarks',
                                 style:
                                 const TextStyle(
-                                  color: Colors.grey,
+                                  color:
+                                  Colors.grey,
                                 ),
                               ),
                             ],
@@ -887,11 +1214,11 @@ class _ExamsResultsScreenState
                       ),
                     ),
                   );
-                }).toList(),
-              );
-            },
-          ),
-        ],
+                },
+              ),
+            ],
+          );
+        },
       ),
     );
   }

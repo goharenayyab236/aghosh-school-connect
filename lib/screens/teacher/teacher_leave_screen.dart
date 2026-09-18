@@ -2,293 +2,801 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TeacherLeaveScreen extends StatelessWidget {
-  const TeacherLeaveScreen({super.key});
+const TeacherLeaveScreen({super.key});
 
-  Future<void> updateLeaveStatus(
-      BuildContext context,
-      String documentId,
-      String status,
-      ) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('leave_requests')
-          .doc(documentId)
-          .update({
-        'status': status,
-      });
+final String className = 'Grade 5';
+final String section = 'A';
 
-      if (!context.mounted) return;
+// ---------------------------------------------------------
+// APPROVE / REJECT + TEACHER NOTE
+// ---------------------------------------------------------
+Future<void> reviewLeave(
+BuildContext context,
+String documentId,
+String status,
+) async {
+final noteController = TextEditingController();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Leave request $status successfully.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
+final note = await showDialog<String>(
+context: context,
+barrierDismissible: false,
+builder: (dialogContext) {
+return AlertDialog(
+title: Text(
+status == 'Approved'
+? 'Approve Leave Request'
+    : 'Reject Leave Request',
+),
+content: Column(
+mainAxisSize: MainAxisSize.min,
+crossAxisAlignment: CrossAxisAlignment.start,
+children: [
+Text(
+status == 'Approved'
+? 'Add a note for the parent.'
+    : 'Add a reason for rejecting the leave.',
+),
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error updating leave request: $e',
-          ),
-        ),
-      );
-    }
-  }
+const SizedBox(height: 15),
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Leave Requests'),
-        centerTitle: true,
-      ),
+TextField(
+controller: noteController,
+maxLines: 4,
+decoration: const InputDecoration(
+labelText: 'Teacher Note',
+hintText: 'Write a note...',
+border: OutlineInputBorder(),
+),
+),
+],
+),
+actions: [
+TextButton(
+onPressed: () {
+Navigator.pop(dialogContext);
+},
+child: const Text('Cancel'),
+),
 
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('leave_requests')
-            .snapshots(),
+ElevatedButton(
+onPressed: () {
+Navigator.pop(
+dialogContext,
+noteController.text.trim(),
+);
+},
+child: Text(
+status == 'Approved'
+? 'Approve'
+    : 'Reject',
+),
+),
+],
+);
+},
+);
 
-        builder: (context, snapshot) {
-          if (snapshot.connectionState ==
-              ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
+noteController.dispose();
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Error loading leave requests:\n'
-                    '${snapshot.error}',
-                textAlign: TextAlign.center,
-              ),
-            );
-          }
+if (note == null) {
+return;
+}
 
-          final requests =
-              snapshot.data?.docs ?? [];
+try {
+await FirebaseFirestore.instance
+    .collection('leave_requests')
+    .doc(documentId)
+    .update({
+'status': status,
+'teacherNote': note,
+'updatedAt': FieldValue.serverTimestamp(),
+});
 
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              const Text(
-                'Student Leave Requests',
-                style: TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+if (!context.mounted) return;
 
-              const SizedBox(height: 20),
+ScaffoldMessenger.of(context).showSnackBar(
+SnackBar(
+content: Text(
+status == 'Approved'
+? 'Leave approved successfully.'
+    : 'Leave rejected successfully.',
+),
+),
+);
+} catch (e) {
+if (!context.mounted) return;
 
-              if (requests.isEmpty)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(30),
-                    child: Text(
-                      'No leave requests found.',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
+ScaffoldMessenger.of(context).showSnackBar(
+SnackBar(
+content: Text(
+'Could not update leave request:\n$e',
+),
+),
+);
+}
+}
 
-              ...requests.map((document) {
-                final data =
-                document.data()
-                as Map<String, dynamic>;
+// ---------------------------------------------------------
+// LEAVE DETAILS
+// ---------------------------------------------------------
+void showLeaveDetails(
+BuildContext context,
+String documentId,
+Map<String, dynamic> data,
+) {
+final student =
+data['studentName']?.toString() ??
+'Unknown Student';
 
-                final student =
-                    data['studentName']
-                        ?.toString() ??
-                        'Unknown Student';
+final leaveType =
+data['leaveType']?.toString() ??
+'Leave';
 
-                final reason =
-                    data['reason']
-                        ?.toString() ??
-                        'No reason provided';
+final reason =
+data['reason']?.toString() ??
+'No reason provided';
 
-                final status =
-                    data['status']
-                        ?.toString() ??
-                        'Pending';
+final startDate =
+data['startDate']?.toString() ??
+'';
 
-                final startDate =
-                    data['startDate']
-                        ?.toString() ??
-                        '';
+final endDate =
+data['endDate']?.toString() ??
+'';
 
-                final endDate =
-                    data['endDate']
-                        ?.toString() ??
-                        '';
+final status =
+data['status']?.toString() ??
+'Pending';
 
-                return _leaveCard(
-                  context,
-                  document.id,
-                  student,
-                  reason,
-                  status,
-                  startDate,
-                  endDate,
-                );
-              }),
-            ],
-          );
-        },
-      ),
-    );
-  }
+final teacherNote =
+data['teacherNote']?.toString() ??
+'';
 
-  Widget _leaveCard(
-      BuildContext context,
-      String documentId,
-      String student,
-      String reason,
-      String status,
-      String startDate,
-      String endDate,
-      ) {
-    final isPending = status == 'Pending';
+final isPending = status == 'Pending';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 15),
-      elevation: 2,
+final statusColor =
+_getStatusColor(status);
 
-      child: Padding(
-        padding: const EdgeInsets.all(15),
+showDialog(
+context: context,
+builder: (dialogContext) {
+return AlertDialog(
+title: const Text(
+'Leave Request Details',
+),
 
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+content: SingleChildScrollView(
+child: Column(
+crossAxisAlignment:
+CrossAxisAlignment.start,
+mainAxisSize: MainAxisSize.min,
+children: [
+// STUDENT
+_detailRow(
+Icons.person,
+'Student',
+student,
+),
 
-          children: [
-            Row(
-              children: [
-                const CircleAvatar(
-                  child: Icon(Icons.person),
-                ),
+// LEAVE TYPE
+_detailRow(
+Icons.category,
+'Leave Type',
+leaveType,
+),
 
-                const SizedBox(width: 12),
+// START DATE
+_detailRow(
+Icons.calendar_today,
+'Start Date',
+startDate.isEmpty
+? 'Not provided'
+    : startDate,
+),
 
-                Expanded(
-                  child: Text(
-                    student,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+// END DATE
+_detailRow(
+Icons.event,
+'End Date',
+endDate.isEmpty
+? 'Not provided'
+    : endDate,
+),
 
-                Container(
-                  padding:
-                  const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
+// REASON
+_detailRow(
+Icons.description,
+'Reason',
+reason,
+),
 
-                  decoration: BoxDecoration(
-                    borderRadius:
-                    BorderRadius.circular(20),
-                    color: status == 'Approved'
-                        ? Colors.green.shade100
-                        : status == 'Rejected'
-                        ? Colors.red.shade100
-                        : Colors.orange.shade100,
-                  ),
+const SizedBox(height: 5),
 
-                  child: Text(
-                    status,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: status == 'Approved'
-                          ? Colors.green.shade700
-                          : status == 'Rejected'
-                          ? Colors.red.shade700
-                          : Colors.orange.shade700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+// STATUS
+Row(
+children: [
+const Icon(
+Icons.info_outline,
+size: 21,
+),
 
-            const SizedBox(height: 12),
+const SizedBox(width: 12),
 
-            Text(
-              'Reason: $reason',
-              style: const TextStyle(
-                fontSize: 15,
-              ),
-            ),
+const Text(
+'Status',
+style: TextStyle(
+fontWeight:
+FontWeight.bold,
+),
+),
 
-            if (startDate.isNotEmpty) ...[
-              const SizedBox(height: 8),
+const Spacer(),
 
-              Text(
-                'Start Date: $startDate',
-                style: const TextStyle(
-                  color: Colors.grey,
-                ),
-              ),
-            ],
+Container(
+padding:
+const EdgeInsets
+    .symmetric(
+horizontal: 12,
+vertical: 6,
+),
+decoration: BoxDecoration(
+color: statusColor
+    .withOpacity(0.12),
+borderRadius:
+BorderRadius.circular(
+20,
+),
+),
+child: Text(
+status,
+style: TextStyle(
+color: statusColor,
+fontWeight:
+FontWeight.bold,
+),
+),
+),
+],
+),
 
-            if (endDate.isNotEmpty) ...[
-              const SizedBox(height: 4),
+// TEACHER NOTE
+if (teacherNote.isNotEmpty) ...[
+const SizedBox(height: 18),
 
-              Text(
-                'End Date: $endDate',
-                style: const TextStyle(
-                  color: Colors.grey,
-                ),
-              ),
-            ],
+Container(
+width: double.infinity,
+padding:
+const EdgeInsets.all(12),
+decoration: BoxDecoration(
+color:
+Colors.grey.shade100,
+borderRadius:
+BorderRadius.circular(
+10,
+),
+),
+child: Column(
+crossAxisAlignment:
+CrossAxisAlignment.start,
+children: [
+const Text(
+'Teacher Note',
+style: TextStyle(
+fontWeight:
+FontWeight.bold,
+),
+),
 
-            if (isPending) ...[
-              const SizedBox(height: 15),
+const SizedBox(height: 6),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        updateLeaveStatus(
-                          context,
-                          documentId,
-                          'Rejected',
-                        );
-                      },
-                      child: const Text('Reject'),
-                    ),
-                  ),
+Text(teacherNote),
+],
+),
+),
+],
+],
+),
+),
 
-                  const SizedBox(width: 10),
+actions: [
+// CLOSE
+TextButton(
+onPressed: () {
+Navigator.pop(dialogContext);
+},
+child: const Text('Close'),
+),
 
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        updateLeaveStatus(
-                          context,
-                          documentId,
-                          'Approved',
-                        );
-                      },
-                      child: const Text('Approve'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+// REJECT
+if (isPending)
+OutlinedButton(
+onPressed: () async {
+Navigator.pop(dialogContext);
+
+await reviewLeave(
+context,
+documentId,
+'Rejected',
+);
+},
+style:
+OutlinedButton.styleFrom(
+foregroundColor: Colors.red,
+),
+child: const Text(
+'Reject',
+),
+),
+
+// APPROVE
+if (isPending)
+ElevatedButton(
+onPressed: () async {
+Navigator.pop(dialogContext);
+
+await reviewLeave(
+context,
+documentId,
+'Approved',
+);
+},
+child: const Text(
+'Approve',
+),
+),
+],
+);
+},
+);
+}
+
+Widget _detailRow(
+IconData icon,
+String title,
+String value,
+) {
+return Padding(
+padding:
+const EdgeInsets.only(bottom: 14),
+child: Row(
+crossAxisAlignment:
+CrossAxisAlignment.start,
+children: [
+Icon(
+icon,
+size: 20,
+),
+
+const SizedBox(width: 10),
+
+Expanded(
+child: RichText(
+text: TextSpan(
+style: const TextStyle(
+color: Colors.black87,
+fontSize: 14,
+),
+children: [
+TextSpan(
+text: '$title: ',
+style: const TextStyle(
+fontWeight:
+FontWeight.bold,
+),
+),
+TextSpan(
+text: value,
+),
+],
+),
+),
+),
+],
+),
+);
+}
+
+Color _getStatusColor(
+String status,
+) {
+switch (status.toLowerCase()) {
+case 'approved':
+return Colors.green;
+
+case 'rejected':
+return Colors.red;
+
+default:
+return Colors.orange;
+}
+}
+
+// ---------------------------------------------------------
+// MAIN SCREEN
+// ---------------------------------------------------------
+@override
+Widget build(BuildContext context) {
+return Scaffold(
+appBar: AppBar(
+title:
+const Text('Leave Requests'),
+centerTitle: true,
+),
+
+body: StreamBuilder<QuerySnapshot>(
+stream: FirebaseFirestore.instance
+    .collection('students')
+    .where(
+'className',
+isEqualTo: className,
+)
+    .where(
+'section',
+isEqualTo: section,
+)
+    .snapshots(),
+
+builder:
+(context, studentSnapshot) {
+if (studentSnapshot
+    .connectionState ==
+ConnectionState.waiting) {
+return const Center(
+child:
+CircularProgressIndicator(),
+);
+}
+
+if (studentSnapshot.hasError) {
+return Center(
+child: Text(
+'Error loading students:\n'
+'${studentSnapshot.error}',
+textAlign:
+TextAlign.center,
+),
+);
+}
+
+final students =
+studentSnapshot.data?.docs ??
+[];
+
+final studentIds =
+students.map((doc) {
+final data =
+doc.data()
+as Map<String, dynamic>;
+
+return data['studentId']
+    ?.toString() ??
+doc.id;
+}).toSet();
+
+return StreamBuilder<
+QuerySnapshot>(
+stream:
+FirebaseFirestore.instance
+    .collection(
+'leave_requests')
+    .snapshots(),
+
+builder:
+(context, leaveSnapshot) {
+if (leaveSnapshot
+    .connectionState ==
+ConnectionState.waiting) {
+return const Center(
+child:
+CircularProgressIndicator(),
+);
+}
+
+if (leaveSnapshot.hasError) {
+return Center(
+child: Text(
+'Error loading leave requests:\n'
+'${leaveSnapshot.error}',
+textAlign:
+TextAlign.center,
+),
+);
+}
+
+final allRequests =
+leaveSnapshot.data
+    ?.docs ??
+[];
+
+final requests =
+allRequests.where(
+(document) {
+final data =
+document.data()
+as Map<String,
+dynamic>;
+
+final studentId =
+data['studentId']
+    ?.toString() ??
+'';
+
+return studentIds
+    .contains(studentId);
+},
+).toList();
+
+return ListView(
+padding:
+const EdgeInsets.all(
+20),
+children: [
+Text(
+'$className - Section $section',
+style:
+const TextStyle(
+fontSize: 15,
+color:
+Colors.grey,
+),
+),
+
+const SizedBox(
+height: 5,
+),
+
+const Text(
+'Student Leave Requests',
+style:
+TextStyle(
+fontSize: 23,
+fontWeight:
+FontWeight.bold,
+),
+),
+
+const SizedBox(
+height: 20,
+),
+
+if (requests.isEmpty)
+const Padding(
+padding:
+EdgeInsets.all(
+30),
+child: Center(
+child: Text(
+'No leave requests found for this class.',
+textAlign:
+TextAlign.center,
+style:
+TextStyle(
+color:
+Colors.grey,
+fontSize:
+16,
+),
+),
+),
+),
+
+...requests.map(
+(document) {
+final data =
+document.data()
+as Map<String,
+dynamic>;
+
+return _leaveCard(
+context,
+document.id,
+data,
+);
+},
+),
+],
+);
+},
+);
+},
+),
+);
+}
+
+// ---------------------------------------------------------
+// CLICKABLE LEAVE CARD
+// ---------------------------------------------------------
+Widget _leaveCard(
+BuildContext context,
+String documentId,
+Map<String, dynamic> data,
+) {
+final student =
+data['studentName']
+    ?.toString() ??
+'Unknown Student';
+
+final leaveType =
+data['leaveType']
+    ?.toString() ??
+'Leave';
+
+final reason =
+data['reason']
+    ?.toString() ??
+'No reason provided';
+
+final startDate =
+data['startDate']
+    ?.toString() ??
+'';
+
+final endDate =
+data['endDate']
+    ?.toString() ??
+'';
+
+final status =
+data['status']
+    ?.toString() ??
+'Pending';
+
+final statusColor =
+_getStatusColor(status);
+
+return Card(
+margin:
+const EdgeInsets.only(
+bottom: 15,
+),
+elevation: 2,
+
+child: InkWell(
+borderRadius:
+BorderRadius.circular(12),
+
+onTap: () {
+showLeaveDetails(
+context,
+documentId,
+data,
+);
+},
+
+child: Padding(
+padding:
+const EdgeInsets.all(16),
+
+child: Row(
+children: [
+const CircleAvatar(
+child: Icon(
+Icons.person,
+),
+),
+
+const SizedBox(
+width: 12,
+),
+
+Expanded(
+child: Column(
+crossAxisAlignment:
+CrossAxisAlignment
+    .start,
+children: [
+Text(
+student,
+style:
+const TextStyle(
+fontSize: 17,
+fontWeight:
+FontWeight.bold,
+),
+),
+
+const SizedBox(
+height: 6,
+),
+
+Text(
+leaveType,
+style:
+const TextStyle(
+fontWeight:
+FontWeight.w600,
+),
+),
+
+const SizedBox(
+height: 5,
+),
+
+Text(
+startDate ==
+endDate
+? startDate
+    : '$startDate to $endDate',
+style:
+const TextStyle(
+color:
+Colors.grey,
+),
+),
+
+const SizedBox(
+height: 5,
+),
+
+Text(
+reason,
+maxLines: 1,
+overflow:
+TextOverflow
+    .ellipsis,
+style:
+const TextStyle(
+color:
+Colors.grey,
+),
+),
+],
+),
+),
+
+const SizedBox(
+width: 10,
+),
+
+Column(
+children: [
+Container(
+padding:
+const EdgeInsets
+    .symmetric(
+horizontal: 10,
+vertical: 5,
+),
+decoration:
+BoxDecoration(
+color: statusColor
+    .withOpacity(
+0.12),
+borderRadius:
+BorderRadius
+    .circular(
+20,
+),
+),
+child: Text(
+status,
+style: TextStyle(
+color:
+statusColor,
+fontSize: 12,
+fontWeight:
+FontWeight.bold,
+),
+),
+),
+
+const SizedBox(
+height: 12,
+),
+
+const Icon(
+Icons
+    .arrow_forward_ios,
+size: 15,
+color:
+Colors.grey,
+),
+],
+),
+],
+),
+),
+),
+);
+}
 }

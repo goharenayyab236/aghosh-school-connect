@@ -15,6 +15,10 @@ class _MarkAttendanceScreenState
 
   bool isSaving = false;
 
+  // Current class
+  final String className = 'Grade 5';
+  final String section = 'A';
+
   String todayDate() {
     final now = DateTime.now();
 
@@ -23,45 +27,97 @@ class _MarkAttendanceScreenState
         '${now.day.toString().padLeft(2, '0')}';
   }
 
-  Future<void> saveAttendance() async {
+  Future<void> saveAttendance(
+      List<QueryDocumentSnapshot> students) async {
     setState(() {
       isSaving = true;
     });
 
     try {
-      final studentsSnapshot = await FirebaseFirestore.instance
-          .collection('students')
-          .where(
-        'studentId',
-        isEqualTo: 'student_001',
-      )
-          .get();
+      final date = todayDate();
 
-      if (studentsSnapshot.docs.isEmpty) {
-        throw Exception('Student not found.');
+      for (final document in students) {
+        final data =
+        document.data() as Map<String, dynamic>;
+
+        final studentId =
+            data['studentId']?.toString() ??
+                document.id;
+
+        final studentName =
+            data['name']?.toString() ??
+                'Unknown Student';
+
+        final rollNumber =
+            data['rollNumber']?.toString() ??
+                'Not assigned';
+
+        final status =
+        attendance[studentId] == true
+            ? 'Present'
+            : 'Absent';
+
+        // Use a fixed document ID so saving again
+        // updates today's attendance instead of
+        // creating duplicate records.
+        final attendanceDocumentId =
+            '${studentId}_$date';
+
+        await FirebaseFirestore.instance
+            .collection('attendance')
+            .doc(attendanceDocumentId)
+            .set({
+          'studentId': studentId,
+          'studentName': studentName,
+          'rollNumber': rollNumber,
+          'className': className,
+          'section': section,
+          'date': date,
+          'status': status,
+          'updatedAt':
+          FieldValue.serverTimestamp(),
+        });
+
+        // --------------------------------------------------
+        // CREATE ABSENT NOTIFICATION
+        // --------------------------------------------------
+        if (status == 'Absent') {
+          final notificationDocumentId =
+              'attendance_${studentId}_$date';
+
+          await FirebaseFirestore.instance
+              .collection('notifications')
+              .doc(notificationDocumentId)
+              .set({
+            'type': 'attendance',
+            'studentId': studentId,
+            'studentName': studentName,
+            'title': 'Attendance Alert',
+            'message':
+            '$studentName was marked absent on $date.',
+            'className': className,
+            'section': section,
+            'attendanceId': attendanceDocumentId,
+            'date': date,
+            'createdAt':
+            FieldValue.serverTimestamp(),
+          });
+        }
+
+        // --------------------------------------------------
+        // REMOVE ABSENT NOTIFICATION IF CHANGED TO PRESENT
+        // --------------------------------------------------
+        if (status == 'Present') {
+          final notificationDocumentId =
+              'attendance_${studentId}_$date';
+
+          await FirebaseFirestore.instance
+              .collection('notifications')
+              .doc(notificationDocumentId)
+              .delete()
+              .catchError((_) {});
+        }
       }
-
-      final studentDocument = studentsSnapshot.docs.first;
-
-      final data =
-      studentDocument.data();
-
-      final studentName =
-          data['name']?.toString() ?? 'Ahmed Khan';
-
-      final status =
-      attendance['student_001'] == true
-          ? 'Present'
-          : 'Absent';
-
-      await FirebaseFirestore.instance
-          .collection('attendance')
-          .add({
-        'studentId': 'student_001',
-        'studentName': studentName,
-        'date': todayDate(),
-        'status': status,
-      });
 
       if (!mounted) return;
 
@@ -98,16 +154,18 @@ class _MarkAttendanceScreenState
         title: const Text('Mark Attendance'),
         centerTitle: true,
       ),
-
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('students')
             .where(
-          'studentId',
-          isEqualTo: 'student_001',
+          'className',
+          isEqualTo: className,
+        )
+            .where(
+          'section',
+          isEqualTo: section,
         )
             .snapshots(),
-
         builder: (context, snapshot) {
           if (snapshot.connectionState ==
               ConnectionState.waiting) {
@@ -118,19 +176,24 @@ class _MarkAttendanceScreenState
 
           if (snapshot.hasError) {
             return Center(
-              child: Text(
-                'Error loading student:\n${snapshot.error}',
-                textAlign: TextAlign.center,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'Error loading students:\n${snapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
               ),
             );
           }
 
-          final students = snapshot.data?.docs ?? [];
+          final students =
+              snapshot.data?.docs ?? [];
 
           if (students.isEmpty) {
             return const Center(
               child: Text(
-                'No students found.',
+                'No students found in this class.',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 17,
                   color: Colors.grey,
@@ -139,40 +202,175 @@ class _MarkAttendanceScreenState
             );
           }
 
+          // Make every student Present by default.
+          for (final document in students) {
+            final data =
+            document.data()
+            as Map<String, dynamic>;
+
+            final studentId =
+                data['studentId']?.toString() ??
+                    document.id;
+
+            attendance.putIfAbsent(
+              studentId,
+                  () => true,
+            );
+          }
+
+          final presentCount =
+              students.where((document) {
+                final data =
+                document.data()
+                as Map<String, dynamic>;
+
+                final studentId =
+                    data['studentId']?.toString() ??
+                        document.id;
+
+                return attendance[studentId] ?? true;
+              }).length;
+
+          final absentCount =
+              students.length - presentCount;
+
           return Column(
             children: [
+              // Class information
               Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  10,
+                ),
+                child: Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding:
+                    const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.class_,
+                              size: 30,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '$className - Section $section',
+                                style:
+                                const TextStyle(
+                                  fontSize: 19,
+                                  fontWeight:
+                                  FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment:
+                          MainAxisAlignment
+                              .spaceBetween,
+                          children: [
+                            Text(
+                              'Date: ${todayDate()}',
+                              style:
+                              const TextStyle(
+                                color: Colors.grey,
+                              ),
+                            ),
+                            Text(
+                              '${students.length} student${students.length == 1 ? '' : 's'}',
+                              style:
+                              const TextStyle(
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Attendance summary
+              Padding(
+                padding:
+                const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 5,
+                ),
                 child: Row(
                   children: [
-                    const Expanded(
-                      child: Text(
-                        'Grade 5',
-                        style: TextStyle(
-                          fontSize: 21,
-                          fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Card(
+                        child: Padding(
+                          padding:
+                          const EdgeInsets.all(12),
+                          child: Column(
+                            children: [
+                              Text(
+                                '$presentCount',
+                                style:
+                                const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight:
+                                  FontWeight.bold,
+                                ),
+                              ),
+                              const Text('Present'),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-
-                    Text(
-                      todayDate(),
-                      style: const TextStyle(
-                        color: Colors.grey,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Card(
+                        child: Padding(
+                          padding:
+                          const EdgeInsets.all(12),
+                          child: Column(
+                            children: [
+                              Text(
+                                '$absentCount',
+                                style:
+                                const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight:
+                                  FontWeight.bold,
+                                ),
+                              ),
+                              const Text('Absent'),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
 
+              const SizedBox(height: 5),
+
+              // Student list
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(
+                  padding:
+                  const EdgeInsets.symmetric(
                     horizontal: 20,
                   ),
                   itemCount: students.length,
-                  itemBuilder: (context, index) {
-                    final document = students[index];
+                  itemBuilder:
+                      (context, index) {
+                    final document =
+                    students[index];
 
                     final data =
                     document.data()
@@ -188,39 +386,50 @@ class _MarkAttendanceScreenState
                             ?.toString() ??
                             'Unknown Student';
 
+                    final rollNumber =
+                        data['rollNumber']
+                            ?.toString() ??
+                            'Not assigned';
+
                     final isPresent =
-                        attendance[studentId] ?? true;
+                        attendance[studentId] ??
+                            true;
 
                     return Card(
-                      margin: const EdgeInsets.only(
+                      margin:
+                      const EdgeInsets.only(
                         bottom: 10,
                       ),
-
                       child: SwitchListTile(
                         title: Text(
                           studentName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
+                          style:
+                          const TextStyle(
+                            fontWeight:
+                            FontWeight.w600,
                           ),
                         ),
-
                         subtitle: Text(
-                          isPresent
-                              ? 'Present'
-                              : 'Absent',
+                          'Roll No: $rollNumber\n'
+                              '${isPresent ? 'Present' : 'Absent'}',
                         ),
-
                         value: isPresent,
-
                         onChanged: (value) {
                           setState(() {
                             attendance[studentId] =
                                 value;
                           });
                         },
-
-                        secondary: const Icon(
-                          Icons.person,
+                        secondary: CircleAvatar(
+                          child: Text(
+                            rollNumber,
+                            style:
+                            const TextStyle(
+                              fontSize: 11,
+                              fontWeight:
+                              FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                     );
@@ -228,17 +437,21 @@ class _MarkAttendanceScreenState
                 ),
               ),
 
+              // Save button
               Padding(
-                padding: const EdgeInsets.all(20),
+                padding:
+                const EdgeInsets.all(20),
                 child: SizedBox(
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton.icon(
-                    onPressed:
-                    isSaving
+                    onPressed: isSaving
                         ? null
-                        : saveAttendance,
-
+                        : () {
+                      saveAttendance(
+                        students,
+                      );
+                    },
                     icon: isSaving
                         ? const SizedBox(
                       width: 20,
@@ -249,7 +462,6 @@ class _MarkAttendanceScreenState
                       ),
                     )
                         : const Icon(Icons.save),
-
                     label: Text(
                       isSaving
                           ? 'Saving...'
